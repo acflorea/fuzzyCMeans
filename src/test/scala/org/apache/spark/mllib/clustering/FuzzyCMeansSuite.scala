@@ -19,9 +19,11 @@ package org.apache.spark.mllib.clustering
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.util.Utils
 import org.apache.spark.mllib.util.TestingUtils._
+
+import scala.util.Random
 
 /**
  * Created by acflorea on 05/04/16.
@@ -201,6 +203,48 @@ object FuzzyCSuite extends SparkFunSuite {
         assert(ca === cb)
       case _ =>
         throw new AssertionError("checkEqual failed since the two clusters were not identical.\n")
+    }
+  }
+}
+
+class FuzzyCMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
+
+  test("task size should be small in both training and prediction") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble)))
+    }.cache()
+    for (initMode <- Seq(KMeans.RANDOM, KMeans.K_MEANS_PARALLEL)) {
+      // If we serialize data directly in the task closure, the size of the serialized task would be
+      // greater than 1MB and hence Spark would throw an error.
+      val model = FuzzyCMeans.train(points, 2, 2, 1, initMode)
+      val predictions = model.fuzzyPredict(points).collect()
+      val cost = model.computeCost(points)
+    }
+  }
+}
+
+/**
+ * Leave this here to be able to compare the "standard" KMeans with the enhanced version
+ * in terms of performance
+ */
+class KMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
+
+  test("task size should be small in both training and prediction") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => Vectors.dense(Array.fill(n)(random.nextDouble)))
+    }.cache()
+    for (initMode <- Seq(KMeans.RANDOM, KMeans.K_MEANS_PARALLEL)) {
+      // If we serialize data directly in the task closure, the size of the serialized task would be
+      // greater than 1MB and hence Spark would throw an error.
+      val model = KMeans.train(points, 2, 2, 1, initMode)
+      val predictions = model.predict(points).collect()
+      val cost = model.computeCost(points)
     }
   }
 }
