@@ -34,38 +34,33 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.Row
 
 /**
- * A clustering model for K-means. Each point belongs to the cluster with the closest center.
+ * A clustering model for Fuzzy C-means. Each point to each cluster with a certain degree of probability
  */
-@Since("0.8.0")
-class FuzzyCMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array[Vector],
-                                       @Since("1.6.0") val m: Double = 1.0)
+class FuzzyCMeansModel(val clusterCenters: Array[Vector],
+                       val m: Double = 1.0)
   extends Saveable with Serializable with PMMLExportable {
 
   /**
    * A Java-friendly constructor that takes an Iterable of Vectors.
    */
-  @Since("1.4.0")
   def this(centers: java.lang.Iterable[Vector]) = this(centers.asScala.toArray)
 
   /**
    * Total number of clusters.
    */
-  @Since("0.8.0")
   def k: Int = clusterCenters.length
 
   /**
    * Returns the cluster index that a given point belongs to.
    */
-  @Since("0.8.0")
   def predict(point: Vector): Int = {
     FuzzyCMeans.findClosest(clusterCentersWithNorm, new VectorWithNorm(point))._1
   }
 
   /**
    * For each cluster, returns its index
-   * and the probability the point belongs to that particular cluster
+   * and the probability for the point to belong to that particular cluster
    */
-  @Since("1.6.0")
   def fuzzyPredict(point: Vector): Seq[(Int, Double)] = {
     val centersWithNorm = clusterCentersWithNorm.toArray
     val degreesOfMembership = FuzzyCMeans.degreesOfMembership(
@@ -78,7 +73,6 @@ class FuzzyCMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array
   /**
    * Maps given points to their cluster indices.
    */
-  @Since("1.0.0")
   def predict(points: RDD[Vector]): RDD[Int] = {
     val centersWithNorm = clusterCentersWithNorm
     val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
@@ -88,7 +82,6 @@ class FuzzyCMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array
   /**
    * Maps given points to their cluster indices.
    */
-  @Since("1.0.0")
   def fuzzyPredict(points: RDD[Vector]): RDD[Seq[(Int, Double)]] = {
     val centersWithNorm = clusterCentersWithNorm
     val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
@@ -106,15 +99,13 @@ class FuzzyCMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array
   /**
    * Maps given points to their cluster indices.
    */
-  @Since("1.0.0")
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
 
   /**
-   * Return the K-means cost (sum of squared distances of points to their nearest center) for this
+   * Return the cost (sum of squared distances of points to their nearest center) for this
    * model on the given data.
    */
-  @Since("0.8.0")
   def computeCost(data: RDD[Vector]): Double = {
     val centersWithNorm = clusterCentersWithNorm
     val bcCentersWithNorm = data.context.broadcast(centersWithNorm)
@@ -124,7 +115,6 @@ class FuzzyCMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array
   private def clusterCentersWithNorm: Iterable[VectorWithNorm] =
     clusterCenters.map(new VectorWithNorm(_))
 
-  @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
     FuzzyCMeansModel.SaveLoadV1_0.save(sc, this, path)
   }
@@ -132,10 +122,8 @@ class FuzzyCMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array
   override protected def formatVersion: String = "1.0"
 }
 
-@Since("1.4.0")
 object FuzzyCMeansModel extends Loader[FuzzyCMeansModel] {
 
-  @Since("1.4.0")
   override def load(sc: SparkContext, path: String): FuzzyCMeansModel = {
     FuzzyCMeansModel.SaveLoadV1_0.load(sc, path)
   }
@@ -151,10 +139,10 @@ object FuzzyCMeansModel extends Loader[FuzzyCMeansModel] {
   private[clustering]
   object SaveLoadV1_0 {
 
-    private val thisFormatVersion = "2.0"
+    private val thisFormatVersion = "1.0"
 
     private[clustering]
-    val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
+    val thisClassName = "org.apache.spark.mllib.clustering.FuzzyCMeansModel"
 
     def save(sc: SparkContext, model: FuzzyCMeansModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
