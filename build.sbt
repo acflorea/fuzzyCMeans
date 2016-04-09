@@ -2,10 +2,13 @@ name := "fuzzyCMeans"
 
 version := "1.5.2"
 
-scalaVersion := "2.11.8"
+scalaVersion := "2.10.6"
 
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % "1.5.2"
   , "org.apache.spark" %% "spark-mllib" % "1.5.2"
   , "org.scalactic" %% "scalactic" % "2.2.6"
   , "org.scalatest" %% "scalatest" % "2.2.6" % "test")
+
+// enable publishing the jar produced by `test:package`
+publishArtifact in (Test, packageBin) := true

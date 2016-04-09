@@ -21,16 +21,18 @@ import org.scalatest.{Suite, BeforeAndAfterAll}
 
 import org.apache.spark.{SparkConf, SparkContext}
 
-trait LocalClusterSparkContext extends BeforeAndAfterAll { self: Suite =>
+trait LocalClusterSparkContext extends BeforeAndAfterAll {
+  self: Suite =>
   @transient var sc: SparkContext = _
 
   override def beforeAll() {
     val conf = new SparkConf()
-      //.setMaster("local-cluster[2, 1, 1024]")
-      .setMaster("local[*]")
+      .setMaster("local-cluster[2, 1, 1024]")
       .setAppName("test-cluster")
+      .set("spark.driver.memory", "4G")
       .set("spark.akka.frameSize", "1") // set to 1MB to detect direct serialization of data
     sc = new SparkContext(conf)
+
     super.beforeAll()
   }
 

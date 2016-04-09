@@ -221,6 +221,7 @@ class FuzzyCMeansClusterSuite extends SparkFunSuite with LocalClusterSparkContex
       // greater than 1MB and hence Spark would throw an error.
       val model = FuzzyCMeans.train(points, 2, 2, 1, initMode)
       val predictions = model.fuzzyPredict(points).collect()
+      val hard_predictions = model.predict(points).collect()
       val cost = model.computeCost(points)
     }
   }
