@@ -37,8 +37,8 @@ import org.apache.spark.sql.Row
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
 @Since("0.8.0")
-class KMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array[Vector],
-                                  @Since("1.6.0") val m: Double = 1.0)
+class FuzzyCMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array[Vector],
+                                       @Since("1.6.0") val m: Double = 1.0)
   extends Saveable with Serializable with PMMLExportable {
 
   /**
@@ -126,18 +126,18 @@ class KMeansModel @Since("1.1.0")(@Since("1.0.0") val clusterCenters: Array[Vect
 
   @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
-    KMeansModel.SaveLoadV1_0.save(sc, this, path)
+    FuzzyCMeansModel.SaveLoadV1_0.save(sc, this, path)
   }
 
   override protected def formatVersion: String = "1.0"
 }
 
 @Since("1.4.0")
-object KMeansModel extends Loader[KMeansModel] {
+object FuzzyCMeansModel extends Loader[FuzzyCMeansModel] {
 
   @Since("1.4.0")
-  override def load(sc: SparkContext, path: String): KMeansModel = {
-    KMeansModel.SaveLoadV1_0.load(sc, path)
+  override def load(sc: SparkContext, path: String): FuzzyCMeansModel = {
+    FuzzyCMeansModel.SaveLoadV1_0.load(sc, path)
   }
 
   private case class Cluster(id: Int, point: Vector)
@@ -156,7 +156,7 @@ object KMeansModel extends Loader[KMeansModel] {
     private[clustering]
     val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
 
-    def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
+    def save(sc: SparkContext, model: FuzzyCMeansModel, path: String): Unit = {
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
       val metadata = compact(render(
@@ -172,7 +172,7 @@ object KMeansModel extends Loader[KMeansModel] {
       dataRDD.write.parquet(Loader.dataPath(path))
     }
 
-    def load(sc: SparkContext, path: String): KMeansModel = {
+    def load(sc: SparkContext, path: String): FuzzyCMeansModel = {
       implicit val formats = DefaultFormats
       val sqlContext = new SQLContext(sc)
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
@@ -183,8 +183,8 @@ object KMeansModel extends Loader[KMeansModel] {
       val centroids = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Cluster](centroids.schema)
       val localCentroids = centroids.map(Cluster.apply).collect()
-      assert(k == localCentroids.size)
-      new KMeansModel(localCentroids.sortBy(_.id).map(_.point), m)
+      assert(k == localCentroids.length)
+      new FuzzyCMeansModel(localCentroids.sortBy(_.id).map(_.point), m)
     }
   }
 

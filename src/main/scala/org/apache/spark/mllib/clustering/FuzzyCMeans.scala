@@ -39,14 +39,14 @@ import org.apache.spark.util.random.XORShiftRandom
  */
 @Since("0.8.0")
 class FuzzyCMeans private(
-                      private var k: Int,
-                      private var m: Double,
-                      private var maxIterations: Int,
-                      private var runs: Int,
-                      private var initializationMode: String,
-                      private var initializationSteps: Int,
-                      private var epsilon: Double,
-                      private var seed: Long) extends Serializable with Logging {
+                           private var k: Int,
+                           private var m: Double,
+                           private var maxIterations: Int,
+                           private var runs: Int,
+                           private var initializationMode: String,
+                           private var initializationSteps: Int,
+                           private var epsilon: Double,
+                           private var seed: Long) extends Serializable with Logging {
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, m: 1, maxIterations: 20, runs: 1,
@@ -198,7 +198,7 @@ class FuzzyCMeans private(
 
   // Initial cluster centers can be provided as a KMeansModel object rather than using the
   // random or k-means|| initializationMode
-  private var initialModel: Option[KMeansModel] = None
+  private var initialModel: Option[FuzzyCMeansModel] = None
 
   /**
    * Set the initial starting point, bypassing the random initialization or k-means||
@@ -206,7 +206,7 @@ class FuzzyCMeans private(
    * in an IllegalArgumentException.
    */
   @Since("1.4.0")
-  def setInitialModel(model: KMeansModel): this.type = {
+  def setInitialModel(model: FuzzyCMeansModel): this.type = {
     require(model.k == k, "mismatched cluster count")
     initialModel = Some(model)
     this
@@ -217,7 +217,7 @@ class FuzzyCMeans private(
    * performance, because this is an iterative algorithm.
    */
   @Since("0.8.0")
-  def run(data: RDD[Vector]): KMeansModel = {
+  def run(data: RDD[Vector]): FuzzyCMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -244,7 +244,7 @@ class FuzzyCMeans private(
   /**
    * Implementation of K-Means algorithm.
    */
-  private def runAlgorithm(data: RDD[VectorWithNorm]): KMeansModel = {
+  private def runAlgorithm(data: RDD[VectorWithNorm]): FuzzyCMeansModel = {
 
     val sc = data.sparkContext
 
@@ -262,16 +262,16 @@ class FuzzyCMeans private(
     // Array of Arrays of VectorWithNorms
     // there is one array of centers per run (if more than one model is trained)
     val centers = initialModel match {
-      case Some(kMeansCenters) => {
+      case Some(kMeansCenters) =>
         Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
-      }
-      case None => {
+
+      case None =>
         if (initializationMode == KMeans.RANDOM) {
           initRandom(data)
         } else {
           initKMeansParallel(data)
         }
-      }
+
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
@@ -295,7 +295,7 @@ class FuzzyCMeans private(
     // - no more active runs (all runs converged)
     // - maximum number of iterations reached
     // Execute iterations of Lloyd's algorithm until all runs have converged
-    while (iteration < maxIterations && !activeRuns.isEmpty) {
+    while (iteration < maxIterations && activeRuns.nonEmpty) {
 
       type WeightedPoint = (Vector, Double)
       // this is the function that will be used in the reduce phase
@@ -424,7 +424,7 @@ class FuzzyCMeans private(
 
     logInfo(s"The cost for the best run is $minCost.")
 
-    new KMeansModel(centers(bestRun).map(_.vector), m)
+    new FuzzyCMeansModel(centers(bestRun).map(_.vector), m)
   }
 
   /**
@@ -509,7 +509,7 @@ class FuzzyCMeans private(
           val rs = (0 until runs).filter { r =>
             rand.nextDouble() < 2.0 * c(r) * k / sumCosts(r)
           }
-          if (rs.length > 0) Some(p, rs) else None
+          if (rs.nonEmpty) Some(p, rs) else None
         }
       }.collect()
       mergeNewCenters()
@@ -533,7 +533,7 @@ class FuzzyCMeans private(
     }.reduceByKey(_ + _).collectAsMap()
     val finalCenters = (0 until runs).par.map { r =>
       val myCenters = centers(r).toArray
-      val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), 0.0)).toArray
+      val myWeights = myCenters.indices.map(i => weightMap.getOrElse((r, i), 0.0)).toArray
       LocalKMeans.kMeansPlusPlus(r, myCenters, myWeights, k, 30)
     }
 
@@ -557,13 +557,13 @@ object FuzzyCMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
+   * @param data               training points stored as `RDD[Vector]`
+   * @param k                  number of clusters
+   * @param maxIterations      max number of iterations
+   * @param runs               number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
-   * @param seed random seed value for cluster initialization
-   * @param m fuzzifier, between 1 and infinity, default is 1, which leads to hard clustering
+   * @param seed               random seed value for cluster initialization
+   * @param m                  fuzzifier, between 1 and infinity, default is 1, which leads to hard clustering
    */
   @Since("1.6.0")
   def train(
@@ -573,7 +573,7 @@ object FuzzyCMeans {
              runs: Int,
              initializationMode: String,
              seed: Long,
-             m: Double): KMeansModel = {
+             m: Double): FuzzyCMeansModel = {
     new FuzzyCMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
@@ -586,12 +586,12 @@ object FuzzyCMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
+   * @param data               training points stored as `RDD[Vector]`
+   * @param k                  number of clusters
+   * @param maxIterations      max number of iterations
+   * @param runs               number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
-   * @param seed random seed value for cluster initialization
+   * @param seed               random seed value for cluster initialization
    */
   @Since("1.3.0")
   def train(
@@ -600,8 +600,8 @@ object FuzzyCMeans {
              maxIterations: Int,
              runs: Int,
              initializationMode: String,
-             seed: Long): KMeansModel = {
-    new KMeans().setK(k)
+             seed: Long): FuzzyCMeansModel = {
+    new FuzzyCMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
@@ -612,10 +612,10 @@ object FuzzyCMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
+   * @param data               training points stored as `RDD[Vector]`
+   * @param k                  number of clusters
+   * @param maxIterations      max number of iterations
+   * @param runs               number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
    */
   @Since("0.8.0")
@@ -624,8 +624,8 @@ object FuzzyCMeans {
              k: Int,
              maxIterations: Int,
              runs: Int,
-             initializationMode: String): KMeansModel = {
-    new KMeans().setK(k)
+             initializationMode: String): FuzzyCMeansModel = {
+    new FuzzyCMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
@@ -639,7 +639,7 @@ object FuzzyCMeans {
   def train(
              data: RDD[Vector],
              k: Int,
-             maxIterations: Int): KMeansModel = {
+             maxIterations: Int): FuzzyCMeansModel = {
     train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
   }
 
@@ -651,7 +651,7 @@ object FuzzyCMeans {
              data: RDD[Vector],
              k: Int,
              maxIterations: Int,
-             runs: Int): KMeansModel = {
+             runs: Int): FuzzyCMeansModel = {
     train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
   }
 
