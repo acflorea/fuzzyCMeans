@@ -9,3 +9,4 @@ In order to use it on a Spark cluster the following steps are required:
 - the build process will result in the creation of the following jar files:
  - ```./target/scala-2.10/fuzzycmeans_2.10-1.5.2.jar```
  - ```./target/scala-2.10/fuzzycmeans_2.10-1.5.2-tests.jar```
+- The built jars can be added to the Spark cluster using `--jars' argument, for example, ```./spark-shell --jars /pathTo/fuzzyCMeans/target/scala-2.10/fuzzycmeans_2.10-1.5.2.jar, pathTo/fuzzyCMeans/target/scala-2.10/fuzzycmeans_2.10-1.5.2-tests.jar```
