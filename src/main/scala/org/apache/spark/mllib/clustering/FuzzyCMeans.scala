@@ -53,7 +53,7 @@ class FuzzyCMeans private(
    * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random}.
    */
   @Since("0.8.0")
-  def this() = this(2, 1, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
+  def this() = this(2, 2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
 
   /**
    * Number of clusters to create (k).

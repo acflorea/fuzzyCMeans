@@ -73,11 +73,6 @@ class FuzzyCMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     var model = FuzzyCMeans.train(data, k = 3, maxIterations = 1)
     assert(model.clusterCenters.length === 3)
 
-    // Fuzzier models
-    model = FuzzyCMeans.train(
-      data, k = 3, maxIterations = 1, runs = 1, initializationMode = RANDOM,
-      seed = Utils.random.nextLong(), m = 2.0)
-    assert(model.clusterCenters.length === 3)
   }
 
   test("single cluster with big dataset") {
@@ -116,6 +111,53 @@ class FuzzyCMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
+  }
+
+  test("single cluster with sparse data") {
+
+    val n = 10000
+    val data = sc.parallelize((1 to 100).flatMap { i =>
+      val x = i / 1000.0
+      Array(
+        Vectors.sparse(n, Seq((0, 1.0 + x), (1, 2.0), (2, 6.0))),
+        Vectors.sparse(n, Seq((0, 1.0 - x), (1, 2.0), (2, 6.0))),
+        Vectors.sparse(n, Seq((0, 1.0), (1, 3.0 + x))),
+        Vectors.sparse(n, Seq((0, 1.0), (1, 3.0 - x))),
+        Vectors.sparse(n, Seq((0, 1.0), (1, 4.0), (2, 6.0 + x))),
+        Vectors.sparse(n, Seq((0, 1.0), (1, 4.0), (2, 6.0 - x)))
+      )
+    }, 4)
+
+    data.persist()
+
+    // No matter how many runs or iterations we use, we should get one cluster,
+    // centered at the mean of the points
+
+    val center = Vectors.sparse(n, Seq((0, 1.0), (1, 3.0), (2, 4.0)))
+
+    var model = FuzzyCMeans.train(data, k = 1, maxIterations = 1)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = FuzzyCMeans.train(data, k = 1, maxIterations = 2)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = FuzzyCMeans.train(data, k = 1, maxIterations = 5)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = FuzzyCMeans.train(data, k = 1, maxIterations = 1, runs = 5)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = FuzzyCMeans.train(data, k = 1, maxIterations = 1, runs = 5)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = FuzzyCMeans.train(data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = FuzzyCMeans.train(data, k = 1, maxIterations = 1, runs = 1,
+      initializationMode = K_MEANS_PARALLEL)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    data.unpersist()
   }
 
   test("model save/load") {
