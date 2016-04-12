@@ -17,10 +17,11 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.clustering.{FuzzyCMeans => MLlibFuzzyCMeans, FuzzyCMeansModel => MLlibFuzzyCMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -100,7 +101,9 @@ private[clustering] trait FuzzyCMeansParams extends Params with HasMaxIter with 
  */
 class FuzzyCMeansModel private[ml](
                                     override val uid: String,
-                                    private val parentModel: MLlibFuzzyCMeansModel) extends Model[FuzzyCMeansModel] with FuzzyCMeansParams {
+                                    private val parentModel: MLlibFuzzyCMeansModel)
+  extends Model[FuzzyCMeansModel]
+  with FuzzyCMeansParams with MLWritable{
 
   override def copy(extra: ParamMap): FuzzyCMeansModel = {
     val copied = new FuzzyCMeansModel(uid, parentModel)
@@ -122,6 +125,58 @@ class FuzzyCMeansModel private[ml](
 
   def clusterCenters: Array[Vector] = parentModel.clusterCenters
 
+  /**
+   * Return the K-means cost (sum of squared distances of points to their nearest center) for this
+   * model on the given data.
+   */
+  // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
+  def computeCost(dataset: DataFrame): Double = {
+    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    val data = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+    parentModel.computeCost(data)
+  }
+
+  override def write: MLWriter = new FuzzyCMeansModel.FuzzyCMeansModelWriter(this)
+}
+
+object FuzzyCMeansModel extends MLReadable[FuzzyCMeansModel] {
+
+  override def read: MLReader[FuzzyCMeansModel] = new FuzzyCMeansModelReader
+
+  override def load(path: String): FuzzyCMeansModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[FuzzyCMeansModel]] */
+  private[FuzzyCMeansModel] class FuzzyCMeansModelWriter(instance: FuzzyCMeansModel) extends MLWriter {
+
+    private case class Data(clusterCenters: Array[Vector])
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: cluster centers
+      val data = Data(instance.clusterCenters)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class FuzzyCMeansModelReader extends MLReader[FuzzyCMeansModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[FuzzyCMeansModel].getName
+
+    override def load(path: String): FuzzyCMeansModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath).select("clusterCenters").head()
+      val clusterCenters = data.getAs[Seq[Vector]](0).toArray
+      val model = new FuzzyCMeansModel(metadata.uid, new MLlibFuzzyCMeansModel(clusterCenters))
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
 }
 
 /**
@@ -132,7 +187,7 @@ class FuzzyCMeansModel private[ml](
  */
 class FuzzyCMeans(
                    override val uid: String)
-  extends Estimator[FuzzyCMeansModel] with FuzzyCMeansParams {
+  extends Estimator[FuzzyCMeansModel] with FuzzyCMeansParams  with DefaultParamsWritable {
 
   setDefault(
     k -> 2,
@@ -194,3 +249,8 @@ class FuzzyCMeans(
   }
 }
 
+
+object FuzzyCMeans extends DefaultParamsReadable[FuzzyCMeans] {
+
+  override def load(path: String): FuzzyCMeans = super.load(path)
+}

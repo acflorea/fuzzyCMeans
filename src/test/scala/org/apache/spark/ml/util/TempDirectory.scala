@@ -15,35 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml.util
 
+import java.io.File
+
+import org.apache.spark.util.Utils
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+/**
+ * Trait that creates a temporary directory before all tests and deletes it after all.
+ */
+trait TempDirectory extends BeforeAndAfterAll {
+  self: Suite =>
 
-trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
-  @transient var sc: SparkContext = _
-  @transient var sqlContext: SQLContext = _
+  private var _tempDir: File = _
 
-  override def beforeAll() {
+  /** Returns the temporary directory as a [[File]] instance. */
+  protected def tempDir: File = _tempDir
+
+  override def beforeAll(): Unit = {
     super.beforeAll()
-    val conf = new SparkConf()
-      .setMaster("local[2]")
-      .setAppName("MLlibUnitTest")
-    sc = new SparkContext(conf)
-    SQLContext.clearActive()
-    sqlContext = new SQLContext(sc)
-    SQLContext.setActive(sqlContext)
+    _tempDir = Utils.createTempDir(namePrefix = this.getClass.getName)
   }
 
-  override def afterAll() {
-    sqlContext = null
-    SQLContext.clearActive()
-    if (sc != null) {
-      sc.stop()
-    }
-    sc = null
+  override def afterAll(): Unit = {
+    Utils.deleteRecursively(_tempDir)
     super.afterAll()
   }
 }

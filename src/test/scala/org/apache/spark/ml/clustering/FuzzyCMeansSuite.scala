@@ -18,6 +18,7 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{FuzzyCMeans => MLlibFuzzyCMeans}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -32,9 +33,22 @@ object FuzzyCMeansSuite {
       .map(v => new TestRow(v))
     sql.createDataFrame(rdd)
   }
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "k" -> 3,
+    "m" -> 1.5,
+    "maxIter" -> 2,
+    "tol" -> 0.01
+  )
 }
 
-class FuzzyCMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
+class FuzzyCMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   final val k = 5
   @transient var dataset: DataFrame = _
@@ -113,6 +127,14 @@ class FuzzyCMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     val hardPredictions = clusters.map(cluster => cluster.maxBy(_.getDouble(1))).map(_.getInt(0))
 
     assert(hardPredictions === Set(0, 1, 2, 3, 4))
+  }
 
+  test("read/write") {
+    def checkModelData(model: FuzzyCMeansModel, model2: FuzzyCMeansModel): Unit = {
+      assert(model.clusterCenters === model2.clusterCenters)
+      assert(model.m === model2.m)
+    }
+    val fuzzyCmeans = new FuzzyCMeans()
+    testEstimatorAndModelReadWrite(fuzzyCmeans, dataset, FuzzyCMeansSuite.allParamSettings, checkModelData)
   }
 }

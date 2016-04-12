@@ -23,7 +23,6 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.pmml.PMMLExportable
@@ -37,7 +36,7 @@ import org.apache.spark.sql.Row
  * A clustering model for Fuzzy C-means. Each point to each cluster with a certain degree of probability
  */
 class FuzzyCMeansModel(val clusterCenters: Array[Vector],
-                       val m: Double = 1.0)
+                       val m: Double = 2.0)
   extends Saveable with Serializable with PMMLExportable {
 
   /**
